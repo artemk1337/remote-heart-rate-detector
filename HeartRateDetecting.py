@@ -66,13 +66,13 @@ def add_filters_video(data_buffer,fps,low=0.4,high=2,levels=3,amplification=30):
 ##### Видео-фильтры #####
 
 
-
 def image_normalization(self, img):
     img -= np.min(img)
     img /= np.max(img)
     img *= 255
     img = img.astype(np.uint8)
     return img
+
 
 def get_avg_color_signal(frames):
     mean = []
@@ -316,6 +316,7 @@ class PulseAnalyzer:
             plt.yticks([])
             plt.legend([key], loc=1)
 
+        # not use
         def plot_graph_2(subplot, key):
             fig.add_subplot(*subplot)
             plt.plot(self.time_full[max(max_idx - self.buff_size, 0):max_idx],
@@ -340,26 +341,24 @@ class PulseAnalyzer:
         plt.yticks([])
 
         fig.add_subplot(5, 2, 2)
-        img = self.__image_normalization__(self.all_frames_filtered['full_face'][max_idx])
+        img = image_normalization(self.all_frames_filtered['full_face'][max_idx])
         plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         plt.xticks([])
         plt.yticks([])
 
         for ii, key in enumerate(self.mean_g_signals_filtered):
             plot_graph_1([5, 4, 5 + ii], key)
-        for ii, key in enumerate(self.mean_g_signals_filtered):
-            plot_graph_2([5, 4, 9 + ii], key)
+        # for ii, key in enumerate(self.mean_g_signals_filtered):
+        #     plot_graph_2([5, 4, 9 + ii], key)
         for ii, key in enumerate(self.mean_g_signals_filtered):
             plot_graph_3([5, 4, 13 + ii], key)
 
-        # plt.tight_layout(pad=0.4)
         canvas = FigureCanvasAgg(fig)
         s, (width, height) = canvas.print_to_buffer()
         X = np.fromstring(s, np.uint8).reshape((height, width, 4))
         # display(fig)
         plt.clf()
         # clear_output(wait=True)
-        # print(X.shape)
         X = cv2.cvtColor(X, cv2.COLOR_RGBA2BGR)
         return crop(X)
 
@@ -368,4 +367,3 @@ if __name__ == "__main__":
     HRD = PulseAnalyzer(buff_size=50, save_speedx=1., filename='../files/id2_0001.mp4')
     HRD.find_face_haard()
     HRD.process()
-
