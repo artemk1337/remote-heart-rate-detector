@@ -1,3 +1,3 @@
-# remote_pulse_detecting
+# Remote heart rate detector
 
 ![](example.gif "example")
