@@ -81,10 +81,7 @@ def image_normalization(img):
 
 
 def get_avg_color_signal(frames):
-    mean = []
-    for frame in frames:
-        # green channel
-        mean += [frame[:, :, 1].mean()]
+    mean = [frame[:, :, 1].mean() for frame in frames]
     return np.array(mean)
 
 
