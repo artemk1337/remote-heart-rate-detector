@@ -136,25 +136,28 @@ class PulseAnalyzer:
         if cuda.is_available():
             frames_cropped = []
             box_prev = None
+            h_shift, w_shift, centers = [], [], None
             mtcnn = MTCNN(image_size=200, device=device)
             for frame in tqdm(self.frames):
                 box, _ = mtcnn.detect(frame)
                 if box is not None:
                     box = np.array(box[0]).astype(int)
-                    frame_cropped = frame[box[1]:box[3], box[0]:box[2]]
-                    box_prev = box
-                    frame_cropped = cv2.resize(frame_cropped, (150, 150))
-                    frames_cropped += [frame_cropped]
-                else:
-                    if box_prev is not None:
-                        box = box_prev
-                        frame_cropped = frame[box[1]:box[3], box[0]:box[2]]
-                        frame_cropped = cv2.resize(frame_cropped, (150, 150))
-                        frames_cropped += [frame_cropped]
+                    x1, x2, y1, y2 = box[1], box[3], box[0], box[2]
+                    h_shift += [y2 - y1]
+                    w_shift += [x2 - x1]
+                    centers = [y1 + h_shift[-1] // 2, x1 + w_shift[-1]  // 2]
+                    if centers is not None:
+                        self.centers += [centers]
                     else:
-                        frames_cropped += [0]
-            idx = [idx for idx, val in enumerate(frames_cropped) if val == 0]
-            if len(idx) > 0: frames_cropped[:idx[-1] + 1] = [frames_cropped[idx[-1] + 1] for i in range(idx[-1] + 1)]
+                        self.centers += [0]
+                else:
+                    self.centers += [0]
+
+            idxs = [idx for idx, val in enumerate(self.centers) if val == 0]
+            for index in sorted(idxs, reverse=True):
+                del self.centers[index]
+                del self.frames[index]
+
 
         # haard; uses without cuda
         else:
