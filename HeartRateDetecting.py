@@ -95,12 +95,12 @@ class PulseAnalyzer:
         self.visualize = visualize
 
         self.frames = []
+        self.frame_ids = []
         self.centers = []
         self.faces = []
 
         self.ROI_coords = {}
         self.frames_ROI = {}
-        self.all_frames_filtered = {}
 
         # buffers
         self.frames_filtered = {}
@@ -123,20 +123,47 @@ class PulseAnalyzer:
     def get_frames_from_videofile(self, filename):
         self.filename = filename
         self.frames = []
+        self.frame_ids = []
+        
         cap = cv2.VideoCapture(filename)
         self.fps = cap.get(cv2.CAP_PROP_FPS)
+        i = 0
         while 1:
             ret, img = cap.read()
-            if not ret:
+            if not ret or i > 200:  ################################
                 break
             self.frames += [img]
+            self.frame_ids += [i]
+            i += 1
 
     def find_face(self):
+        """
+        find face on the frames
+
+        create:
+            self.faces
+            self.frame_ids
+        """
+        def del_skipped_frames():
+            idxs = [idx for idx, val in enumerate(self.centers) if val == 0]
+            for index in sorted(idxs, reverse=True):
+                del self.centers[index]
+                del self.frames[index]
+                del self.frame_ids[index]
+        
+        def medfilt_filter(step=7):
+            y_ = medfilt([i[0] for i in self.centers], step)
+            x_ = medfilt([i[1] for i in self.centers], step)
+            return y_, x_
+            
+
+        self.centers, h_shift, w_shift, centers = ([], [], [], None)
+
         # fast mtcnn pytorch; uses with cuda
         if cuda.is_available():
             frames_cropped = []
             box_prev = None
-            h_shift, w_shift, centers = [], [], None
+            
             mtcnn = MTCNN(image_size=200, device=device)
             for frame in tqdm(self.frames):
                 box, _ = mtcnn.detect(frame)
@@ -153,44 +180,42 @@ class PulseAnalyzer:
                 else:
                     self.centers += [0]
 
-            idxs = [idx for idx, val in enumerate(self.centers) if val == 0]
-            for index in sorted(idxs, reverse=True):
-                del self.centers[index]
-                del self.frames[index]
-
+            del mtcnn
 
         # haard; uses without cuda
         else:
-            face_cascade = cv2.CascadeClassifier('haarcascades/haarcascade_frontalface_default.xml')
-            h_shift, w_shift, centers = [], [], None
+            face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+            
             for frame in tqdm(self.frames):
                 gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
                 faces = face_cascade.detectMultiScale(gray)
                 for (x, y, w, h) in faces:
                     h_shift += [h // 2]
                     w_shift += [w // 2]
-                    centers = [y + h // 2, x + w // 2]
-                    break
+                    centers = [y + h // 2, x + w // 2] 
                 if centers is not None:
                     self.centers += [centers]
                 else:
                     self.centers += [0]
+            
+            del face_cascade
 
-            # clean zero value
-            idx = [idx for idx, val in enumerate(self.centers) if val == 0]
-            if len(idx) > 0: self.centers[:idx[-1] + 1] = [self.centers[idx[-1] + 1] for i in range(idx[-1] + 1)]
+        del_skipped_frames()
 
-            self.box_shift = [np.mean(h_shift, dtype=int), np.mean(w_shift, dtype=int)]
-            # drop discharges from signal
-            if len(self.centers) == 0: raise ValueError("Невозможно определить лицо")
-            y_ = medfilt([i[0] for i in self.centers], 7)
-            x_ = medfilt([i[1] for i in self.centers], 7)
+        self.box_shift = [np.mean(w_shift, dtype=int), np.mean(h_shift, dtype=int)]
+        # drop discharges from signal
+        if len(self.centers) == 0: raise ValueError("Невозможно определить лицо")
+        y_, x_ = medfilt_filter()
 
-            self.centers = [[int(y), int(x)] for x, y in zip(x_, y_)]
-            for frame, (y, x) in tqdm(zip(self.frames, self.centers)):
-                face = frame[y - self.box_shift[0]:y + self.box_shift[0],
-                       x - self.box_shift[1]:x + self.box_shift[1]]
-                self.faces += [face]
+        self.centers = [[int(y), int(x)] for x, y in zip(x_, y_)]
+        for frame, (y, x) in tqdm(zip(self.frames, self.centers)):
+            face = frame[x - self.box_shift[0]:x + self.box_shift[0],
+                         y - self.box_shift[1]:y + self.box_shift[1]]
+            plt.imshow(frame)
+            plt.show()
+            plt.imshow(face)
+            plt.show()
+            self.faces += [face]
 
     def add_rectangles_img(self, img) -> np:
         def rectangle(img, x, y, w, h):
@@ -225,7 +250,8 @@ class PulseAnalyzer:
                 if x and y and w and h:
                     img = np.array(frame[y:y + h, x:x + w], copy=True)
                 else:
-                    img = np.array(frame, copy=True)
+                    img = cv2.resize(frame, (max(frame.shape[0], frame.shape[1]),
+                                             max(frame.shape[0], frame.shape[1])))
                 tmp += [img]
             return tmp
 
@@ -234,35 +260,33 @@ class PulseAnalyzer:
 
         x = int(self.faces[0].shape[0] * 0.4)
         w = int(self.faces[0].shape[0] * 0.6) - x
-        y = int(self.faces[0].shape[0] * 0.05)
+        y = int(self.faces[0].shape[1] * 0.05)
         h = w
         self.ROI_coords['forehead'] = [x, y, w, h]
         self.frames_ROI['forehead'] = create_ROI_(self.faces, *self.ROI_coords['forehead'])
 
         x = int(self.faces[0].shape[0] * 0.25)
         w = int(self.faces[0].shape[0] * 0.35) - x
-        y = int(self.faces[0].shape[0] * 0.6)
+        y = int(self.faces[0].shape[1] * 0.6)
         h = w
         self.ROI_coords['left_cheek'] = [x, y, w, h]
+        print(self.ROI_coords['left_cheek'])
         self.frames_ROI['left_cheek'] = create_ROI_(self.faces, *self.ROI_coords['left_cheek'])
 
         x = int(self.faces[0].shape[0] * 0.65)
         w = int(self.faces[0].shape[0] * 0.75) - x
-        y = int(self.faces[0].shape[0] * 0.6)
+        y = int(self.faces[0].shape[1] * 0.6)
         h = w
         self.ROI_coords['right_cheek'] = [x, y, w, h]
+        print(self.ROI_coords['right_cheek'])
         self.frames_ROI['right_cheek'] = create_ROI_(self.faces, *self.ROI_coords['right_cheek'])
 
     def __apply_video_filters(self, idx_start, idx_finish):
         for key in self.frames_ROI:
+            print(key)
             self.mean_g_signals[key] = get_avg_color_signal(self.frames_ROI[key][idx_start:idx_finish])
             self.frames_filtered[key] = add_filters_video(self.frames_ROI[key][idx_start:idx_finish], self.fps)
             self.mean_g_signals_filtered[key] = get_avg_color_signal(self.frames_filtered[key])
-
-    def __apply_video_filters_all(self):
-        for key in self.frames_ROI:
-            self.all_frames_filtered[key] = add_filters_video(self.frames_ROI[key], self.fps)
-            # self.mean_g_signals_all_filtered[key] = get_avg_color_signal(self.all_frames_filtered[key])
 
     def __process_signals(self):
         for key in self.mean_g_signals_filtered:
@@ -306,6 +330,7 @@ class PulseAnalyzer:
         self.__get_fourier()
         self.times_s += [self.time_full[idx_start:idx_finish]]
 
+
     def process(self):
         def save_video(filename):
             out = cv2.VideoWriter(filename + '_pulse.avi',
@@ -318,10 +343,14 @@ class PulseAnalyzer:
             out.release()
 
         print("========== Createe ROI ==========")
+        plt.imshow(self.faces[0])
+        plt.show()
         self.__create_ROI()
+        plt.imshow(self.faces[0])
+        plt.show()
+        plt.imshow(self.frames[0])
+        plt.show()
         del self.frames
-        print("========== Filters for full Video ==========")
-        self.__apply_video_filters_all()
         self.fft_buff = []
         self.pulse_buff = []
         self.times_s = []
@@ -331,6 +360,7 @@ class PulseAnalyzer:
         self.all_imgs = []
         self.samples_ICA = []
         if len(self.faces) < self.buff_size: self.buff_size = len(self.faces)
+
         for max_idx in tqdm(range(30, len(self.faces))):
             self.__apply_filters_buff(max(max_idx - self.buff_size, 0), max_idx)
             if len(self.mean_g_signals_norm['forehead']) == self.buff_size:
@@ -338,6 +368,7 @@ class PulseAnalyzer:
             if self.visualize: self.all_imgs += [self.__visualize__(fig, max_idx)]
         if self.visualize: save_video(self.filename)
         else: return self.fft_buff
+
 
     def __visualize__(self, fig, max_idx):
         def crop(img):
@@ -372,14 +403,8 @@ class PulseAnalyzer:
         y_time = np.round(np.linspace(self.time_full[max(max_idx - self.buff_size, 0)],
                                       self.time_full[max_idx],
                                       10, ), 2)
-        fig.add_subplot(3, 2, 1)
+        fig.add_subplot(3, 1, 1)
         plt.imshow(cv2.cvtColor(self.add_rectangles_img(self.faces[max_idx]), cv2.COLOR_BGR2RGB))
-        plt.xticks([])
-        plt.yticks([])
-
-        fig.add_subplot(3, 2, 2)
-        img = image_normalization(self.all_frames_filtered['full_face'][max_idx])
-        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
         plt.xticks([])
         plt.yticks([])
 
