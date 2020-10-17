@@ -130,7 +130,7 @@ class PulseAnalyzer:
         i = 0
         while 1:
             ret, img = cap.read()
-            if not ret or i > 200:  ################################
+            if not ret or i > 50:  ################################
                 break
             self.frames += [img]
             self.frame_ids += [i]
@@ -170,9 +170,11 @@ class PulseAnalyzer:
                 if box is not None:
                     box = np.array(box[0]).astype(int)
                     x1, x2, y1, y2 = box[1], box[3], box[0], box[2]
-                    h_shift += [y2 - y1]
-                    w_shift += [x2 - x1]
-                    centers = [y1 + h_shift[-1] // 2, x1 + w_shift[-1]  // 2]
+                    h_shift += [(y2 - y1) // 2]
+                    w_shift += [(x2 - x1) // 2]
+                    centers = [y1 + h_shift[-1], x1 + w_shift[-1]]
+                    #plt.imshow(frame[x1:x2, y1:y2])
+                    #plt.show()
                     if centers is not None:
                         self.centers += [centers]
                     else:
@@ -181,6 +183,8 @@ class PulseAnalyzer:
                     self.centers += [0]
 
             del mtcnn
+            
+            del_skipped_frames()
 
         # haard; uses without cuda
         else:
@@ -200,7 +204,7 @@ class PulseAnalyzer:
             
             del face_cascade
 
-        del_skipped_frames()
+            del_skipped_frames()
 
         self.box_shift = [np.mean(w_shift, dtype=int), np.mean(h_shift, dtype=int)]
         # drop discharges from signal
@@ -211,11 +215,8 @@ class PulseAnalyzer:
         for frame, (y, x) in tqdm(zip(self.frames, self.centers)):
             face = frame[x - self.box_shift[0]:x + self.box_shift[0],
                          y - self.box_shift[1]:y + self.box_shift[1]]
-            plt.imshow(frame)
-            plt.show()
-            plt.imshow(face)
-            plt.show()
             self.faces += [face]
+
 
     def add_rectangles_img(self, img) -> np:
         def rectangle(img, x, y, w, h):
@@ -243,6 +244,7 @@ class PulseAnalyzer:
         show_imgs(frames)
         cv2.destroyAllWindows()
 
+
     def __create_ROI(self):
         def create_ROI_(frames, x=None, y=None, w=None, h=None):
             tmp = []
@@ -250,53 +252,46 @@ class PulseAnalyzer:
                 if x and y and w and h:
                     img = np.array(frame[y:y + h, x:x + w], copy=True)
                 else:
-                    img = cv2.resize(frame, (max(frame.shape[0], frame.shape[1]),
+                    img = cv2.resize(np.array(frame, copy=True), (max(frame.shape[0], frame.shape[1]),
                                              max(frame.shape[0], frame.shape[1])))
                 tmp += [img]
             return tmp
+        
+        def create_xwyh_square(p_x1, p_x2, p_y1):
+            x = int(self.faces[0].shape[1] * p_x1)
+            w = int(self.faces[0].shape[1] * p_x2) - x
+            y = int(self.faces[0].shape[0] * p_y1)
+            h = w
+            return x, y, w, h
 
+        # y, x, z
         self.ROI_coords['full_face'] = [None, None, None, None]
         self.frames_ROI['full_face'] = create_ROI_(self.faces, *self.ROI_coords['full_face'])
 
-        x = int(self.faces[0].shape[0] * 0.4)
-        w = int(self.faces[0].shape[0] * 0.6) - x
-        y = int(self.faces[0].shape[1] * 0.05)
-        h = w
-        self.ROI_coords['forehead'] = [x, y, w, h]
+        self.ROI_coords['forehead'] = [*create_xwyh_square(0.4, 0.6, 0.05)]
         self.frames_ROI['forehead'] = create_ROI_(self.faces, *self.ROI_coords['forehead'])
 
-        x = int(self.faces[0].shape[0] * 0.25)
-        w = int(self.faces[0].shape[0] * 0.35) - x
-        y = int(self.faces[0].shape[1] * 0.6)
-        h = w
-        self.ROI_coords['left_cheek'] = [x, y, w, h]
-        print(self.ROI_coords['left_cheek'])
+        self.ROI_coords['left_cheek'] = [*create_xwyh_square(0.15, 0.28, 0.5)]
         self.frames_ROI['left_cheek'] = create_ROI_(self.faces, *self.ROI_coords['left_cheek'])
 
-        x = int(self.faces[0].shape[0] * 0.65)
-        w = int(self.faces[0].shape[0] * 0.75) - x
-        y = int(self.faces[0].shape[1] * 0.6)
-        h = w
-        self.ROI_coords['right_cheek'] = [x, y, w, h]
-        print(self.ROI_coords['right_cheek'])
+        self.ROI_coords['right_cheek'] = [*create_xwyh_square(0.72, 0.85, 0.5)]
         self.frames_ROI['right_cheek'] = create_ROI_(self.faces, *self.ROI_coords['right_cheek'])
+
 
     def __apply_video_filters(self, idx_start, idx_finish):
         for key in self.frames_ROI:
-            print(key)
             self.mean_g_signals[key] = get_avg_color_signal(self.frames_ROI[key][idx_start:idx_finish])
             self.frames_filtered[key] = add_filters_video(self.frames_ROI[key][idx_start:idx_finish], self.fps)
             self.mean_g_signals_filtered[key] = get_avg_color_signal(self.frames_filtered[key])
 
+
     def __process_signals(self):
         for key in self.mean_g_signals_filtered:
-            # self.mean_g_signals_detrend[key] = signal.detrend(self.mean_g_signals_filtered[key])
             detrend = signal.detrend(self.mean_g_signals_filtered[key])
-            # interpolated = np.interp(self.time_s, self.time_s, self.mean_g_signals_detrend[key])  # interpolation by 1
             interpolated = np.interp(self.time_s, self.time_s, detrend)  # interpolation by 1
             interpolated = np.hamming(self.L) * interpolated  # make the signal become more periodic
-            # self.mean_g_signals_interpolated[key] = interpolated
             self.mean_g_signals_norm[key] = interpolated / np.linalg.norm(interpolated)
+
 
     def __get_fourier(self):
         self.fft = {}
@@ -322,6 +317,7 @@ class PulseAnalyzer:
             d_bpm[key] = int(freqs_[idx2])
         self.pulse_buff += [d_bpm]
 
+
     def __apply_filters_buff(self, idx_start, idx_finish):
         self.__apply_video_filters(idx_start, idx_finish)
         self.L = int(idx_finish - idx_start)
@@ -343,13 +339,13 @@ class PulseAnalyzer:
             out.release()
 
         print("========== Createe ROI ==========")
-        plt.imshow(self.faces[0])
-        plt.show()
         self.__create_ROI()
-        plt.imshow(self.faces[0])
-        plt.show()
-        plt.imshow(self.frames[0])
-        plt.show()
+
+        #plt.imshow(self.faces[0])
+        #plt.show()
+        #plt.imshow(self.frames_ROI['full_face'][0])
+        #plt.show()
+
         del self.frames
         self.fft_buff = []
         self.pulse_buff = []
@@ -365,12 +361,12 @@ class PulseAnalyzer:
             self.__apply_filters_buff(max(max_idx - self.buff_size, 0), max_idx)
             if len(self.mean_g_signals_norm['forehead']) == self.buff_size:
                 self.samples_ICA += [self.mean_g_signals['forehead']]
-            if self.visualize: self.all_imgs += [self.__visualize__(fig, max_idx)]
+            if self.visualize: self.all_imgs += [self.__visualize__(fig, max_idx, self.frame_ids[max_idx])]
         if self.visualize: save_video(self.filename)
         else: return self.fft_buff
 
 
-    def __visualize__(self, fig, max_idx):
+    def __visualize__(self, fig, max_idx, frame_id):
         def crop(img):
             # x, y
             return img[100:-50, 150:-100]
@@ -404,6 +400,7 @@ class PulseAnalyzer:
                                       self.time_full[max_idx],
                                       10, ), 2)
         fig.add_subplot(3, 1, 1)
+        plt.title(f"{frame_id}")
         plt.imshow(cv2.cvtColor(self.add_rectangles_img(self.faces[max_idx]), cv2.COLOR_BGR2RGB))
         plt.xticks([])
         plt.yticks([])
@@ -418,7 +415,7 @@ class PulseAnalyzer:
         canvas = FigureCanvasAgg(fig)
         s, (width, height) = canvas.print_to_buffer()
         X = np.fromstring(s, np.uint8).reshape((height, width, 4))
-        # display(fig)
+        display(fig)
         plt.clf()
         # clear_output(wait=True)
         X = cv2.cvtColor(X, cv2.COLOR_RGBA2BGR)
