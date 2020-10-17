@@ -130,7 +130,7 @@ class PulseAnalyzer:
         i = 0
         while 1:
             ret, img = cap.read()
-            if not ret or i > 50:  ################################
+            if not ret:
                 break
             self.frames += [img]
             self.frame_ids += [i]
@@ -415,7 +415,7 @@ class PulseAnalyzer:
         canvas = FigureCanvasAgg(fig)
         s, (width, height) = canvas.print_to_buffer()
         X = np.fromstring(s, np.uint8).reshape((height, width, 4))
-        display(fig)
+        # display(fig)
         plt.clf()
         # clear_output(wait=True)
         X = cv2.cvtColor(X, cv2.COLOR_RGBA2BGR)
