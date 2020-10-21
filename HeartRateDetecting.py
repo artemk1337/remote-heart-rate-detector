@@ -209,7 +209,8 @@ class PulseAnalyzer:
         self.box_shift = [np.mean(w_shift, dtype=int), np.mean(h_shift, dtype=int)]
         # drop discharges from signal
         if len(self.centers) == 0: raise ValueError("Невозможно определить лицо")
-        y_, x_ = medfilt_filter()
+        if cuda.is_available(): y_, x_ = medfilt_filter(5)
+        else: y_, x_ = medfilt_filter()
 
         self.centers = [[int(y), int(x)] for x, y in zip(x_, y_)]
         for frame, (y, x) in tqdm(zip(self.frames, self.centers)):
@@ -369,7 +370,7 @@ class PulseAnalyzer:
     def __visualize__(self, fig, max_idx, frame_id):
         def crop(img):
             # x, y
-            return img[100:-50, 150:-100]
+            return img[100:-50, 140:-100]
 
         def plot_graph_1(subplot, key):
             fig.add_subplot(*subplot)
@@ -400,7 +401,7 @@ class PulseAnalyzer:
                                       self.time_full[max_idx],
                                       10, ), 2)
         fig.add_subplot(3, 1, 1)
-        plt.title(f"{frame_id}")
+        plt.title(f"Кадр: {frame_id}, размер буффера: {self.buff_size}")
         plt.imshow(cv2.cvtColor(self.add_rectangles_img(self.faces[max_idx]), cv2.COLOR_BGR2RGB))
         plt.xticks([])
         plt.yticks([])
@@ -423,6 +424,6 @@ class PulseAnalyzer:
 
 
 if __name__ == "__main__":
-    HRD = PulseAnalyzer(buff_size=150, save_speedx=0.2, filename='files/id2_0008.mp4', visualize=True)
-    HRD.find_face_haard()
+    HRD = PulseAnalyzer(buff_size=150, save_speedx=0.2, filename='../files/id2_0008.mp4', visualize=True)
+    HRD.find_face()
     HRD.process()
