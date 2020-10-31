@@ -38,6 +38,14 @@ def gaussian_video(video_tensor,levels=3):
     return vid_data
 
 def temporal_ideal_filter(tensor,low,high,fps,axis=0):
+    def plot(tensor1):
+        for i, im in enumerate(tensor1[-5:]):
+            plt.subplot(1, len(tensor1), i+1)
+            plt.imshow(im.astype(int))
+            plt.xticks([])
+            plt.yticks([])
+        plt.show()
+
     fft=fftpack.fft(tensor,axis=axis)
     frequencies = fftpack.fftfreq(tensor.shape[0], d=1.0 / fps)
     bound_low = (np.abs(frequencies - low)).argmin()
@@ -188,7 +196,7 @@ class PulseAnalyzer:
 
         # haard; uses without cuda
         else:
-            face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+            face_cascade = cv2.CascadeClassifier('haarcascades/haarcascade_frontalface_default.xml')
             
             for frame in tqdm(self.frames):
                 gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
@@ -424,6 +432,6 @@ class PulseAnalyzer:
 
 
 if __name__ == "__main__":
-    HRD = PulseAnalyzer(buff_size=150, save_speedx=0.2, filename='../files/id2_0008.mp4', visualize=True)
+    HRD = PulseAnalyzer(buff_size=30, save_speedx=0.2, filename='files/id2_0008.mp4', visualize=True)
     HRD.find_face()
     HRD.process()
