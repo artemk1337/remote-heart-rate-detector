@@ -39,6 +39,7 @@ idx_start, idx_end = int(config.get("video", "idx_start")), eval(config.get("vid
 step = int(config.get("video", "step"))
 buff_size = int(config.get("signal", "buff_size"))
 channel = int(config.get("signal", "channel"))
+n_components = int(config.get("signal", "n_components"))
 levels = int(config.get("color magnification", "levels"))
 
 speedx = float(config.get("save", "speedx"))
@@ -76,7 +77,7 @@ if __name__ == '__main__':
         mean_signals = []
         for area in areas_for_ICA:
             mean_signals = [mean_signals_norm[key][area] for key in mean_signals_norm.keys()]
-            apply_FastICA(mean_signals, fps, 1, filename=filename_ICA + area)
+            apply_FastICA(mean_signals, fps, n_components, filename=filename_ICA + area)
 
 
 
