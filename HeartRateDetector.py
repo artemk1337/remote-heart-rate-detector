@@ -29,6 +29,7 @@ device = device_('cuda:0' if cuda.is_available() else 'cpu')
 
 
 def main(
+    filename,
     visualize,
     FastICA,
     areas,
@@ -63,7 +64,7 @@ def main(
     :return:
     """
 
-    faces_dict, fps, length = extract_frame_from_video(sys.argv[-1], idx_start, idx_end, step=step)
+    faces_dict, fps, length = extract_frame_from_video(filename, idx_start, idx_end, step=step)
     fill_None(faces_dict)
     resize_images_to_one_shape(faces_dict)
     create_ROI(faces_dict)
@@ -92,6 +93,7 @@ def main(
         for area in areas_for_ICA:
             mean_signals = [mean_signals_norm[key][area] for key in mean_signals_norm.keys()]
             apply_FastICA(mean_signals, fps, n_components, filename=filename_ICA + area)
+    print('<===== Finish! =====>')
 
 
 if __name__ == '__main__':
@@ -115,7 +117,8 @@ if __name__ == '__main__':
     filename_ICA = eval(config.get("save", "filename_ICA"))
 
     assert len(sys.argv) == 2, "Args should be 2: python <program name> <filename>"
-    main(visualize,
+    main(sys.argv[-1],
+    visualize,
     FastICA,
     areas,
     areas_for_ICA,
