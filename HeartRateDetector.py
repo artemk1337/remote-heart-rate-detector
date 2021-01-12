@@ -28,27 +28,41 @@ warnings.filterwarnings("ignore")
 device = device_('cuda:0' if cuda.is_available() else 'cpu')
 
 
-config = configparser.ConfigParser()
-config.read('settings.cfg')
+def main(
+    visualize,
+    FastICA,
+    areas,
+    areas_for_ICA,
+    idx_start, idx_end,
+    step,
+    buff_size,
+    channel,
+    n_components,
+    levels,
+    speedx,
+    filename_video,
+    filename_ICA
+):
+    """
 
-visualize = eval(config.get("default", "visualize"))
-FastICA = eval(config.get("default", "FastICA"))
-areas = eval(config.get("areas", "areas"))
-areas_for_ICA = eval(config.get("areas", "areas_for_ICA"))
-idx_start, idx_end = int(config.get("video", "idx_start")), eval(config.get("video", "idx_end"))
-step = int(config.get("video", "step"))
-buff_size = int(config.get("signal", "buff_size"))
-channel = int(config.get("signal", "channel"))
-n_components = int(config.get("signal", "n_components"))
-levels = int(config.get("color magnification", "levels"))
+    :param visualize:
+    :param FastICA:
+    :param areas:
+    :param areas_for_ICA:
+    :param idx_start:
+    :param idx_end:
+    :param step:
+    :param buff_size:
+    :param channel:
+    :param n_components:
+    :param levels:
+    :param speedx:
+    :param filename_video:
+    :param filename_ICA:
 
-speedx = float(config.get("save", "speedx"))
-filename_video = eval(config.get("save", "filename_video"))
-filename_ICA = eval(config.get("save", "filename_ICA"))
+    :return:
+    """
 
-
-if __name__ == '__main__':
-    assert len(sys.argv) == 2, "Args should be 2: python <program name> <filename>"
     faces_dict, fps, length = extract_frame_from_video(sys.argv[-1], idx_start, idx_end, step=step)
     fill_None(faces_dict)
     resize_images_to_one_shape(faces_dict)
@@ -80,11 +94,37 @@ if __name__ == '__main__':
             apply_FastICA(mean_signals, fps, n_components, filename=filename_ICA + area)
 
 
+if __name__ == '__main__':
 
+    config = configparser.ConfigParser()
+    config.read('settings.cfg')
 
+    visualize = eval(config.get("default", "visualize"))
+    FastICA = eval(config.get("default", "FastICA"))
+    areas = eval(config.get("areas", "areas"))
+    areas_for_ICA = eval(config.get("areas", "areas_for_ICA"))
+    idx_start, idx_end = int(config.get("video", "idx_start")), eval(config.get("video", "idx_end"))
+    step = int(config.get("video", "step"))
+    buff_size = int(config.get("signal", "buff_size"))
+    channel = int(config.get("signal", "channel"))
+    n_components = int(config.get("signal", "n_components"))
+    levels = int(config.get("color magnification", "levels"))
 
+    speedx = float(config.get("save", "speedx"))
+    filename_video = eval(config.get("save", "filename_video"))
+    filename_ICA = eval(config.get("save", "filename_ICA"))
 
-
-
-
-
+    assert len(sys.argv) == 2, "Args should be 2: python <program name> <filename>"
+    main(visualize,
+    FastICA,
+    areas,
+    areas_for_ICA,
+    idx_start, idx_end,
+    step,
+    buff_size,
+    channel,
+    n_components,
+    levels,
+    speedx,
+    filename_video,
+    filename_ICA)
