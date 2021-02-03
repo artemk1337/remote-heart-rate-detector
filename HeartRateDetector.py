@@ -84,7 +84,7 @@ def main(
 
     if visualize is True:
         print('<===== Visualize =====>')
-        visualize_f(faces_dict, mean_signals_norm, fft, areas, fps, buff_size,
+        visualize_f(faces_dict, mean_signals_norm, fft, areas, fps, buff_size, channel, step,
                     filename=filename_video, speedx=speedx)
 
     if FastICA is True:
